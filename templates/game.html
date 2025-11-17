@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}AI Fate Game - Playing{% endblock %}
+
+{% block content %}
+<div class="game-page">
+    <div class="game-header">
+        <div class="game-info">
+            <h2>Game ID: <span id="gameId">{{ game_id }}</span></h2>
+            <p>Your Name: <strong id="playerName">{{ player_name }}</strong></p>
+            <p>Round: <span id="currentRound">0</span> / <span id="maxRounds">0</span></p>
+        </div>
+        <button id="copyGameIdBtn" class="btn btn-small">Copy Game ID</button>
+    </div>
+    
+    <div class="scoreboard">
+        <h3>Players</h3>
+        <div id="playersList"></div>
+    </div>
+    
+    <!-- Lobby Phase -->
+    <div id="lobbyPhase" class="phase-container" style="display: none;">
+        <h2>Waiting for Game to Start</h2>
+        <p>Share the Game ID with your friends!</p>
+        <button id="startGameBtn" class="btn btn-primary">Start Game</button>
+        <p class="hint">Need at least 2 players to start</p>
+    </div>
+    
+    <!-- Topic Selection Phase -->
+    <div id="topicSelectionPhase" class="phase-container" style="display: none;">
+        <h2>Topic Selection</h2>
+        <p id="topicChooserText"></p>
+        <div id="topicsList" class="topics-list"></div>
+    </div>
+    
+    <!-- Planning Phase -->
+    <div id="planningPhase" class="phase-container" style="display: none;">
+        <h2>Survival Planning</h2>
+        <div class="topic-display">
+            <h3>Scenario:</h3>
+            <p id="currentTopic" class="scenario-text"></p>
+        </div>
+        
+        <div class="planning-area">
+            <h3>Write Your Survival Plan</h3>
+            <textarea id="survivalPlan" placeholder="Describe your plan to survive this scenario..." rows="8"></textarea>
+            <button id="submitPlanBtn" class="btn btn-primary">Submit Plan</button>
+        </div>
+        
+        <div class="waiting-area" id="waitingForPlayers" style="display: none;">
+            <p>✓ Plan submitted! Waiting for other players...</p>
+            <div id="readyPlayers"></div>
+        </div>
+        
+        <button id="evaluateBtn" class="btn btn-success" style="display: none;">Evaluate All Plans</button>
+    </div>
+    
+    <!-- Results Phase -->
+    <div id="resultsPhase" class="phase-container" style="display: none;">
+        <h2>Round Results</h2>
+        <div id="resultsContainer"></div>
+        <button id="nextRoundBtn" class="btn btn-primary">Next Round</button>
+    </div>
+    
+    <!-- Game Over Phase -->
+    <div id="gameOverPhase" class="phase-container" style="display: none;">
+        <h2>Game Over!</h2>
+        <div id="winnerDisplay"></div>
+        <div id="finalScores"></div>
+        <button onclick="window.location.href='/'" class="btn btn-primary">Play Again</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/game.js') }}"></script>
+{% endblock %}

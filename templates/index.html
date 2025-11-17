@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}AI Fate Game - Home{% endblock %}
+
+{% block content %}
+<div class="home-page">
+    <div class="game-description">
+        <h2>How to Play</h2>
+        <ol>
+            <li>Create a game and invite friends to join</li>
+            <li>A random player picks one of 3 AI-generated deadly scenarios</li>
+            <li>All players write their survival plans</li>
+            <li>The AI judge determines who survives and who dies</li>
+            <li>Play multiple rounds - whoever survives the most wins!</li>
+        </ol>
+    </div>
+    
+    <div class="game-options">
+        <div class="option-card">
+            <h3>Create New Game</h3>
+            <button id="createGameBtn" class="btn btn-primary">Create Game</button>
+        </div>
+        
+        <div class="option-card">
+            <h3>Join Existing Game</h3>
+            <input type="text" id="joinGameId" placeholder="Enter Game ID" class="input">
+            <input type="text" id="joinPlayerName" placeholder="Your Name" class="input">
+            <button id="joinGameBtn" class="btn btn-secondary">Join Game</button>
+        </div>
+    </div>
+</div>
+
+<div id="loadingModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <p>Creating game...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('createGameBtn').addEventListener('click', async () => {
+    const playerName = prompt('Enter your name:');
+    if (!playerName) return;
+    
+    document.getElementById('loadingModal').style.display = 'flex';
+    
+    try {
+        const response = await fetch('/create_game', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        const data = await response.json();
+        
+        if (data.game_id) {
+            window.location.href = `/game/${data.game_id}?player_name=${encodeURIComponent(playerName)}`;
+        }
+    } catch (error) {
+        alert('Error creating game: ' + error.message);
+    } finally {
+        document.getElementById('loadingModal').style.display = 'none';
+    }
+});
+
+document.getElementById('joinGameBtn').addEventListener('click', () => {
+    const gameId = document.getElementById('joinGameId').value.trim();
+    const playerName = document.getElementById('joinPlayerName').value.trim();
+    
+    if (!gameId || !playerName) {
+        alert('Please enter both Game ID and your name');
+        return;
+    }
+    
+    window.location.href = `/game/${gameId}?player_name=${encodeURIComponent(playerName)}`;
+});
+</script>
+{% endblock %}
