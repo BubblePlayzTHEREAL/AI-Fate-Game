@@ -8,10 +8,10 @@ async function joinGame() {
     try {
         const response = await fetch(`/api/game/${gameId}/join`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({player_name: playerName})
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ player_name: playerName })
         });
-        
+
         if (response.ok) {
             console.log('Joined game successfully');
             pollGameState();
@@ -28,10 +28,10 @@ async function pollGameState() {
     try {
         const response = await fetch(`/api/game/${gameId}/state`);
         const data = await response.json();
-        
+
         gameState = data;
         updateUI(data);
-        
+
         // Continue polling
         setTimeout(pollGameState, 2000);
     } catch (error) {
@@ -45,16 +45,16 @@ function updateUI(state) {
     // Update round info
     document.getElementById('currentRound').textContent = state.current_round;
     document.getElementById('maxRounds').textContent = state.max_rounds;
-    
+
     // Update players list
     updatePlayersList(state.players);
-    
+
     // Show appropriate phase
     if (state.phase !== currentPhase) {
         currentPhase = state.phase;
         showPhase(state.phase);
     }
-    
+
     // Update phase-specific content
     switch (state.phase) {
         case 'lobby':
@@ -78,7 +78,7 @@ function updateUI(state) {
 function updatePlayersList(players) {
     const playersList = document.getElementById('playersList');
     playersList.innerHTML = '';
-    
+
     for (const [name, data] of Object.entries(players)) {
         const card = document.createElement('div');
         card.className = 'player-card' + (data.ready ? ' ready' : '');
@@ -97,7 +97,7 @@ function showPhase(phase) {
     document.querySelectorAll('.phase-container').forEach(el => {
         el.style.display = 'none';
     });
-    
+
     // Show current phase
     const phaseMap = {
         'lobby': 'lobbyPhase',
@@ -106,7 +106,7 @@ function showPhase(phase) {
         'results': 'resultsPhase',
         'game_over': 'gameOverPhase'
     };
-    
+
     const phaseId = phaseMap[phase];
     if (phaseId) {
         document.getElementById(phaseId).style.display = 'block';
@@ -116,21 +116,21 @@ function showPhase(phase) {
 function updateLobbyPhase(state) {
     const playerCount = Object.keys(state.players).length;
     const canStart = playerCount >= 2;
-    
+
     document.getElementById('startGameBtn').disabled = !canStart;
 }
 
 function updateTopicSelectionPhase(state) {
     const isChooser = state.topic_chooser === playerName;
-    const chooserText = isChooser 
-        ? "You choose the topic!" 
+    const chooserText = isChooser
+        ? "You choose the topic!"
         : `${state.topic_chooser} is choosing the topic...`;
-    
+
     document.getElementById('topicChooserText').textContent = chooserText;
-    
+
     const topicsList = document.getElementById('topicsList');
     topicsList.innerHTML = '';
-    
+
     if (state.topics) {
         state.topics.forEach((topic, index) => {
             const card = document.createElement('div');
@@ -151,20 +151,20 @@ function updateTopicSelectionPhase(state) {
 
 function updatePlanningPhase(state) {
     document.getElementById('currentTopic').textContent = state.current_topic;
-    
+
     const myPlayer = state.players[playerName];
     if (myPlayer && myPlayer.ready) {
         document.getElementById('survivalPlan').disabled = true;
         document.getElementById('submitPlanBtn').style.display = 'none';
         document.getElementById('waitingForPlayers').style.display = 'block';
-        
+
         // Update ready players list
         const readyPlayers = document.getElementById('readyPlayers');
         const readyList = Object.entries(state.players)
             .filter(([_, data]) => data.ready)
             .map(([name, _]) => name);
         readyPlayers.innerHTML = `Ready: ${readyList.join(', ')}`;
-        
+
         // Check if all players ready
         const allReady = Object.values(state.players).every(p => p.ready);
         if (allReady) {
@@ -183,9 +183,9 @@ document.getElementById('startGameBtn').addEventListener('click', async () => {
     try {
         const response = await fetch(`/api/game/${gameId}/start`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'}
+            headers: { 'Content-Type': 'application/json' }
         });
-        
+
         if (!response.ok) {
             const error = await response.json();
             alert(error.error || 'Failed to start game');
@@ -199,13 +199,13 @@ async function selectTopic(index) {
     try {
         const response = await fetch(`/api/game/${gameId}/select_topic`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 player_name: playerName,
                 topic_index: index
             })
         });
-        
+
         if (!response.ok) {
             const error = await response.json();
             alert(error.error || 'Failed to select topic');
@@ -217,22 +217,22 @@ async function selectTopic(index) {
 
 document.getElementById('submitPlanBtn').addEventListener('click', async () => {
     const plan = document.getElementById('survivalPlan').value.trim();
-    
+
     if (!plan) {
         alert('Please write a survival plan!');
         return;
     }
-    
+
     try {
         const response = await fetch(`/api/game/${gameId}/submit_plan`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 player_name: playerName,
                 plan: plan
             })
         });
-        
+
         if (!response.ok) {
             const error = await response.json();
             alert(error.error || 'Failed to submit plan');
@@ -245,13 +245,13 @@ document.getElementById('submitPlanBtn').addEventListener('click', async () => {
 document.getElementById('evaluateBtn').addEventListener('click', async () => {
     document.getElementById('evaluateBtn').disabled = true;
     document.getElementById('evaluateBtn').textContent = 'Evaluating...';
-    
+
     try {
         const response = await fetch(`/api/game/${gameId}/evaluate`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'}
+            headers: { 'Content-Type': 'application/json' }
         });
-        
+
         if (response.ok) {
             const data = await response.json();
             displayResults(data.results);
@@ -271,7 +271,7 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
 function displayResults(results) {
     const container = document.getElementById('resultsContainer');
     container.innerHTML = '';
-    
+
     results.forEach(result => {
         const card = document.createElement('div');
         card.className = `result-card ${result.survived ? 'survived' : 'died'}`;
@@ -294,16 +294,16 @@ function displayResults(results) {
 document.getElementById('nextRoundBtn').addEventListener('click', async () => {
     document.getElementById('nextRoundBtn').disabled = true;
     document.getElementById('nextRoundBtn').textContent = 'Loading...';
-    
+
     try {
         const response = await fetch(`/api/game/${gameId}/next_round`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'}
+            headers: { 'Content-Type': 'application/json' }
         });
-        
+
         if (response.ok) {
             const data = await response.json();
-            
+
             if (data.game_over) {
                 displayGameOver(data);
             } else {
@@ -329,10 +329,10 @@ function displayGameOver(data) {
         <h3>🏆 Winner: ${data.winner}! 🏆</h3>
         <p>Congratulations on your survival skills!</p>
     `;
-    
+
     const finalScores = document.getElementById('finalScores');
     finalScores.innerHTML = '';
-    
+
     for (const [name, scores] of Object.entries(data.final_scores)) {
         const card = document.createElement('div');
         card.className = 'final-score-card';
