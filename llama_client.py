@@ -6,7 +6,7 @@ class LlamaClient:
     def __init__(self, base_url):
         self.base_url = base_url.rstrip("/")
 
-    def generate(self, prompt, model="dolphin3"):
+    def generate(self, prompt, model="llama3"):
         """Generate text using Llama model"""
         try:
             url = f"{self.base_url}/api/generate"
@@ -20,7 +20,7 @@ class LlamaClient:
 
     def generate_topics(self):
         """Generate 3 deathly scenario topics"""
-        prompt = """Generate exactly 3 dangerous survival scenarios. Each should be a single sentence describing a life-threatening situation.
+        prompt = """Generate exactly 3 dangerous survival scenarios. Each should be a single sentence vaugely describing a life-threatening situation, that is still survivable.
 Format your response as a numbered list:
 1. [First scenario]
 2. [Second scenario]

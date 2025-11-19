@@ -29,6 +29,12 @@ def get_or_create_game(game_id):
             "topic_chooser": None,
             "phase": "lobby",  # lobby, topic_selection, planning, results, game_over
             "round_results": [],
+            # locks to prevent duplicate actions across clients
+            "locks": {
+                "start": False,
+                "evaluate": False,
+                "next_round": False,
+            },
         }
     return games[game_id]
 
@@ -77,10 +83,11 @@ def join_game(game_id):
         }
 
     # Emit player joined event to all players in the game
-    socketio.emit('player_joined', {
-        'player_name': player_name,
-        'players': list(game["players"].keys())
-    }, room=game_id)
+    socketio.emit(
+        "player_joined",
+        {"player_name": player_name, "players": list(game["players"].keys())},
+        room=game_id,
+    )
 
     return jsonify({"success": True, "players": list(game["players"].keys())})
 
@@ -90,8 +97,16 @@ def start_game(game_id):
     """Start the game"""
     game = get_or_create_game(game_id)
 
+    # Prevent duplicate start requests
+    if game["phase"] != "lobby" or game["locks"].get("start"):
+        return jsonify({"error": "Game already started or start locked"}), 400
+
     if len(game["players"]) < 2:
         return jsonify({"error": "Need at least 2 players"}), 400
+
+    # Lock start action and notify clients so they disable the button
+    game["locks"]["start"] = True
+    socketio.emit("action_locked", {"action": "start"}, room=game_id)
 
     game["current_round"] = 1
     game["phase"] = "topic_selection"
@@ -103,12 +118,16 @@ def start_game(game_id):
     game["selected_topics"] = topic_generator.generate_topics()
 
     # Emit game started event to all players
-    socketio.emit('game_started', {
-        "phase": game["phase"],
-        "current_round": game["current_round"],
-        "topic_chooser": game["topic_chooser"],
-        "topics": game["selected_topics"],
-    }, room=game_id)
+    socketio.emit(
+        "game_started",
+        {
+            "phase": game["phase"],
+            "current_round": game["current_round"],
+            "topic_chooser": game["topic_chooser"],
+            "topics": game["selected_topics"],
+        },
+        room=game_id,
+    )
 
     return jsonify(
         {
@@ -162,10 +181,11 @@ def select_topic(game_id):
         player["ready"] = False
 
     # Emit topic selected event to all players
-    socketio.emit('topic_selected', {
-        "phase": game["phase"],
-        "topic": game["current_topic"]
-    }, room=game_id)
+    socketio.emit(
+        "topic_selected",
+        {"phase": game["phase"], "topic": game["current_topic"]},
+        room=game_id,
+    )
 
     return jsonify({"success": True, "topic": game["current_topic"]})
 
@@ -192,18 +212,22 @@ def submit_plan(game_id):
     all_ready = all(p["ready"] for p in game["players"].values())
 
     # Emit plan submitted event to all players
-    socketio.emit('plan_submitted', {
-        "player_name": player_name,
-        "all_ready": all_ready,
-        "players": {
-            name: {
-                "survival_count": data["survival_count"],
-                "death_count": data["death_count"],
-                "ready": data["ready"],
-            }
-            for name, data in game["players"].items()
-        }
-    }, room=game_id)
+    socketio.emit(
+        "plan_submitted",
+        {
+            "player_name": player_name,
+            "all_ready": all_ready,
+            "players": {
+                name: {
+                    "survival_count": data["survival_count"],
+                    "death_count": data["death_count"],
+                    "ready": data["ready"],
+                }
+                for name, data in game["players"].items()
+            },
+        },
+        room=game_id,
+    )
 
     return jsonify({"success": True, "all_ready": all_ready})
 
@@ -216,9 +240,17 @@ def evaluate_round(game_id):
     if game["phase"] != "planning":
         return jsonify({"error": "Not in planning phase"}), 400
 
+    # Prevent duplicate evaluate requests
+    if game["locks"].get("evaluate"):
+        return jsonify({"error": "Evaluation already in progress"}), 400
+
     # Check if all players submitted
     if not all(p["ready"] for p in game["players"].values()):
         return jsonify({"error": "Not all players ready"}), 400
+
+    # Lock evaluation and notify clients so they disable the evaluate button
+    game["locks"]["evaluate"] = True
+    socketio.emit("action_locked", {"action": "evaluate"}, room=game_id)
 
     # Evaluate each player
     round_results = []
@@ -252,10 +284,17 @@ def evaluate_round(game_id):
     game["phase"] = "results"
 
     # Emit results to ALL players in the game
-    socketio.emit('round_results', {
-        "phase": game["phase"],
-        "results": round_results
-    }, room=game_id)
+    socketio.emit(
+        "round_results",
+        {"phase": game["phase"], "results": round_results},
+        room=game_id,
+    )
+
+    # unlock evaluate (phase moved to results; keep consistent)
+    game["locks"]["evaluate"] = False
+
+    # Notify clients that evaluate action is now unlocked
+    socketio.emit("action_unlocked", {"action": "evaluate"}, room=game_id)
 
     return jsonify({"success": True, "results": round_results})
 
@@ -264,6 +303,14 @@ def evaluate_round(game_id):
 def next_round(game_id):
     """Move to next round or end game"""
     game = get_or_create_game(game_id)
+
+    # Prevent duplicate next_round requests
+    if game["locks"].get("next_round"):
+        return jsonify({"error": "Next round already in progress"}), 400
+
+    # Lock next_round and notify clients
+    game["locks"]["next_round"] = True
+    socketio.emit("action_locked", {"action": "next_round"}, room=game_id)
 
     if game["current_round"] >= game["max_rounds"]:
         game["phase"] = "game_over"
@@ -285,7 +332,7 @@ def next_round(game_id):
         }
 
         # Emit game over event to all players
-        socketio.emit('game_over', result_data, room=game_id)
+        socketio.emit("game_over", result_data, room=game_id)
 
         return jsonify(result_data)
 
@@ -297,16 +344,34 @@ def next_round(game_id):
     game["topic_chooser"] = random.choice(list(game["players"].keys()))
     game["selected_topics"] = topic_generator.generate_topics()
 
+    # Reset player plans/ready for the new round
+    for p in game["players"].values():
+        p["current_plan"] = None
+        p["ready"] = False
+
+    # reset locks so actions can be taken in the next round
+    game["locks"]["start"] = False
+    game["locks"]["evaluate"] = False
+    game["locks"]["next_round"] = False
+
     result_data = {
         "game_over": False,
         "phase": game["phase"],
         "next_round": game["current_round"],
         "topic_chooser": game["topic_chooser"],
         "topics": game["selected_topics"],
+        "players": {
+            name: {
+                "survival_count": data["survival_count"],
+                "death_count": data["death_count"],
+                "ready": data.get("ready", False),
+            }
+            for name, data in game["players"].items()
+        },
     }
 
     # Emit next round event to all players
-    socketio.emit('next_round', result_data, room=game_id)
+    socketio.emit("next_round", result_data, room=game_id)
 
     return jsonify(result_data)
 
@@ -339,36 +404,36 @@ def get_game_state(game_id):
     )
 
 
-@socketio.on('connect')
+@socketio.on("connect")
 def handle_connect():
     """Handle client connection"""
     print(f"Client connected: {request.sid}")
 
 
-@socketio.on('disconnect')
+@socketio.on("disconnect")
 def handle_disconnect():
     """Handle client disconnection"""
     print(f"Client disconnected: {request.sid}")
 
 
-@socketio.on('join_game_room')
+@socketio.on("join_game_room")
 def handle_join_game_room(data):
     """Join a game room for WebSocket updates"""
-    game_id = data.get('game_id')
-    player_name = data.get('player_name')
-    
+    game_id = data.get("game_id")
+    player_name = data.get("player_name")
+
     if game_id:
         join_room(game_id)
         print(f"Player {player_name} joined room {game_id}")
-        emit('joined_room', {'game_id': game_id, 'player_name': player_name})
+        emit("joined_room", {"game_id": game_id, "player_name": player_name})
 
 
-@socketio.on('leave_game_room')
+@socketio.on("leave_game_room")
 def handle_leave_game_room(data):
     """Leave a game room"""
-    game_id = data.get('game_id')
-    player_name = data.get('player_name')
-    
+    game_id = data.get("game_id")
+    player_name = data.get("player_name")
+
     if game_id:
         leave_room(game_id)
         print(f"Player {player_name} left room {game_id}")

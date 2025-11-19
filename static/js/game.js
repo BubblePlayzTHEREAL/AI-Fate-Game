@@ -62,15 +62,71 @@ socket.on('next_round', (data) => {
     gameState.current_round = data.next_round;
     gameState.topic_chooser = data.topic_chooser;
     gameState.topics = data.topics;
-    
+    // update players state sent from server (reset ready flags)
+    if (data.players) {
+        gameState.players = data.players;
+    }
+
     // Reset planning phase UI
     document.getElementById('survivalPlan').value = '';
     document.getElementById('survivalPlan').disabled = false;
     document.getElementById('submitPlanBtn').style.display = 'block';
     document.getElementById('waitingForPlayers').style.display = 'none';
     document.getElementById('evaluateBtn').style.display = 'none';
-    
+
     updateUI(gameState);
+});
+
+// Disable buttons globally when server notifies an action lock
+socket.on('action_locked', (data) => {
+    if (!data || !data.action) return;
+    if (data.action === 'start') {
+        const btn = document.getElementById('startGameBtn');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Starting...';
+        }
+    }
+    if (data.action === 'evaluate') {
+        const btn = document.getElementById('evaluateBtn');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Evaluating...';
+        }
+    }
+    if (data.action === 'next_round') {
+        const btn = document.getElementById('nextRoundBtn');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Advancing...';
+        }
+    }
+});
+
+// Re-enable buttons when server notifies an action unlock
+socket.on('action_unlocked', (data) => {
+    if (!data || !data.action) return;
+    if (data.action === 'start') {
+        const btn = document.getElementById('startGameBtn');
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Start Game';
+        }
+    }
+    if (data.action === 'evaluate') {
+        const btn = document.getElementById('evaluateBtn');
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Evaluate All Plans';
+        }
+    }
+    if (data.action === 'next_round') {
+        const btn = document.getElementById('nextRoundBtn');
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Next Round';
+        }
+    }
 });
 
 socket.on('game_over', (data) => {
@@ -265,6 +321,11 @@ document.getElementById('copyGameIdBtn').addEventListener('click', () => {
 });
 
 document.getElementById('startGameBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('startGameBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Starting...';
+    }
     try {
         const response = await fetch(`/api/game/${gameId}/start`, {
             method: 'POST',
@@ -274,9 +335,17 @@ document.getElementById('startGameBtn').addEventListener('click', async () => {
         if (!response.ok) {
             const error = await response.json();
             alert(error.error || 'Failed to start game');
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Start Game';
+            }
         }
     } catch (error) {
         console.error('Error starting game:', error);
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Start Game';
+        }
     }
 });
 
@@ -375,6 +444,8 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
         document.getElementById('evaluateBtn').textContent = 'Evaluate All Plans';
     }
 });
+
+// (Next round button handler is defined later in the file.)
 
 function displayResults(results) {
     const container = document.getElementById('resultsContainer');
