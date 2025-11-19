@@ -3,6 +3,83 @@ const playerName = document.getElementById('playerName').textContent;
 let currentPhase = 'lobby';
 let gameState = {};
 
+// Initialize Socket.IO connection
+const socket = io();
+
+// Socket.IO event handlers
+socket.on('connect', () => {
+    console.log('WebSocket connected');
+    // Join the game room
+    socket.emit('join_game_room', { game_id: gameId, player_name: playerName });
+});
+
+socket.on('disconnect', () => {
+    console.log('WebSocket disconnected');
+});
+
+socket.on('joined_room', (data) => {
+    console.log('Joined game room:', data);
+});
+
+socket.on('player_joined', (data) => {
+    console.log('Player joined:', data);
+    // Refresh game state when a player joins
+    fetchGameState();
+});
+
+socket.on('game_started', (data) => {
+    console.log('Game started:', data);
+    gameState.phase = data.phase;
+    gameState.current_round = data.current_round;
+    gameState.topic_chooser = data.topic_chooser;
+    gameState.topics = data.topics;
+    updateUI(gameState);
+});
+
+socket.on('topic_selected', (data) => {
+    console.log('Topic selected:', data);
+    gameState.phase = data.phase;
+    gameState.current_topic = data.topic;
+    updateUI(gameState);
+});
+
+socket.on('plan_submitted', (data) => {
+    console.log('Plan submitted:', data);
+    gameState.players = data.players;
+    updateUI(gameState);
+});
+
+socket.on('round_results', (data) => {
+    console.log('Round results:', data);
+    gameState.phase = data.phase;
+    displayResults(data.results);
+    showPhase('results');
+});
+
+socket.on('next_round', (data) => {
+    console.log('Next round:', data);
+    gameState.phase = data.phase;
+    gameState.current_round = data.next_round;
+    gameState.topic_chooser = data.topic_chooser;
+    gameState.topics = data.topics;
+    
+    // Reset planning phase UI
+    document.getElementById('survivalPlan').value = '';
+    document.getElementById('survivalPlan').disabled = false;
+    document.getElementById('submitPlanBtn').style.display = 'block';
+    document.getElementById('waitingForPlayers').style.display = 'none';
+    document.getElementById('evaluateBtn').style.display = 'none';
+    
+    updateUI(gameState);
+});
+
+socket.on('game_over', (data) => {
+    console.log('Game over:', data);
+    gameState.phase = data.phase;
+    displayGameOver(data);
+    showPhase('game_over');
+});
+
 // Join game on load
 async function joinGame() {
     try {
@@ -14,7 +91,8 @@ async function joinGame() {
 
         if (response.ok) {
             console.log('Joined game successfully');
-            pollGameState();
+            // Fetch initial game state
+            fetchGameState();
         } else {
             alert('Failed to join game');
         }
@@ -23,20 +101,16 @@ async function joinGame() {
     }
 }
 
-// Poll game state
-async function pollGameState() {
+// Fetch game state (used for initial load and when needed)
+async function fetchGameState() {
     try {
         const response = await fetch(`/api/game/${gameId}/state`);
         const data = await response.json();
 
         gameState = data;
         updateUI(data);
-
-        // Continue polling
-        setTimeout(pollGameState, 2000);
     } catch (error) {
-        console.error('Error polling game state:', error);
-        setTimeout(pollGameState, 5000);
+        console.error('Error fetching game state:', error);
     }
 }
 

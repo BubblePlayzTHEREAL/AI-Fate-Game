@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask_socketio import SocketIO, emit, join_room, leave_room
 import random
 from config import Config
 from llama_client import LlamaClient
@@ -6,6 +7,7 @@ import secrets
 
 app = Flask(__name__)
 app.config.from_object(Config)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Initialize Llama clients
 topic_generator = LlamaClient(app.config["LLAMA_TOPIC_IP"])
@@ -74,6 +76,12 @@ def join_game(game_id):
             "ready": False,
         }
 
+    # Emit player joined event to all players in the game
+    socketio.emit('player_joined', {
+        'player_name': player_name,
+        'players': list(game["players"].keys())
+    }, room=game_id)
+
     return jsonify({"success": True, "players": list(game["players"].keys())})
 
 
@@ -93,6 +101,14 @@ def start_game(game_id):
 
     # Generate topics
     game["selected_topics"] = topic_generator.generate_topics()
+
+    # Emit game started event to all players
+    socketio.emit('game_started', {
+        "phase": game["phase"],
+        "current_round": game["current_round"],
+        "topic_chooser": game["topic_chooser"],
+        "topics": game["selected_topics"],
+    }, room=game_id)
 
     return jsonify(
         {
@@ -145,6 +161,12 @@ def select_topic(game_id):
         player["current_plan"] = None
         player["ready"] = False
 
+    # Emit topic selected event to all players
+    socketio.emit('topic_selected', {
+        "phase": game["phase"],
+        "topic": game["current_topic"]
+    }, room=game_id)
+
     return jsonify({"success": True, "topic": game["current_topic"]})
 
 
@@ -168,6 +190,20 @@ def submit_plan(game_id):
 
     # Check if all players have submitted
     all_ready = all(p["ready"] for p in game["players"].values())
+
+    # Emit plan submitted event to all players
+    socketio.emit('plan_submitted', {
+        "player_name": player_name,
+        "all_ready": all_ready,
+        "players": {
+            name: {
+                "survival_count": data["survival_count"],
+                "death_count": data["death_count"],
+                "ready": data["ready"],
+            }
+            for name, data in game["players"].items()
+        }
+    }, room=game_id)
 
     return jsonify({"success": True, "all_ready": all_ready})
 
@@ -215,6 +251,12 @@ def evaluate_round(game_id):
 
     game["phase"] = "results"
 
+    # Emit results to ALL players in the game
+    socketio.emit('round_results', {
+        "phase": game["phase"],
+        "results": round_results
+    }, room=game_id)
+
     return jsonify({"success": True, "results": round_results})
 
 
@@ -229,19 +271,23 @@ def next_round(game_id):
         # Determine winner
         winner = max(game["players"].items(), key=lambda x: x[1]["survival_count"])
 
-        return jsonify(
-            {
-                "game_over": True,
-                "winner": winner[0],
-                "final_scores": {
-                    name: {
-                        "survivals": data["survival_count"],
-                        "deaths": data["death_count"],
-                    }
-                    for name, data in game["players"].items()
-                },
-            }
-        )
+        result_data = {
+            "game_over": True,
+            "phase": game["phase"],
+            "winner": winner[0],
+            "final_scores": {
+                name: {
+                    "survivals": data["survival_count"],
+                    "deaths": data["death_count"],
+                }
+                for name, data in game["players"].items()
+            },
+        }
+
+        # Emit game over event to all players
+        socketio.emit('game_over', result_data, room=game_id)
+
+        return jsonify(result_data)
 
     # Next round
     game["current_round"] += 1
@@ -251,14 +297,18 @@ def next_round(game_id):
     game["topic_chooser"] = random.choice(list(game["players"].keys()))
     game["selected_topics"] = topic_generator.generate_topics()
 
-    return jsonify(
-        {
-            "game_over": False,
-            "next_round": game["current_round"],
-            "topic_chooser": game["topic_chooser"],
-            "topics": game["selected_topics"],
-        }
-    )
+    result_data = {
+        "game_over": False,
+        "phase": game["phase"],
+        "next_round": game["current_round"],
+        "topic_chooser": game["topic_chooser"],
+        "topics": game["selected_topics"],
+    }
+
+    # Emit next round event to all players
+    socketio.emit('next_round', result_data, room=game_id)
+
+    return jsonify(result_data)
 
 
 @app.route("/api/game/<game_id>/state", methods=["GET"])
@@ -289,8 +339,43 @@ def get_game_state(game_id):
     )
 
 
+@socketio.on('connect')
+def handle_connect():
+    """Handle client connection"""
+    print(f"Client connected: {request.sid}")
+
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Handle client disconnection"""
+    print(f"Client disconnected: {request.sid}")
+
+
+@socketio.on('join_game_room')
+def handle_join_game_room(data):
+    """Join a game room for WebSocket updates"""
+    game_id = data.get('game_id')
+    player_name = data.get('player_name')
+    
+    if game_id:
+        join_room(game_id)
+        print(f"Player {player_name} joined room {game_id}")
+        emit('joined_room', {'game_id': game_id, 'player_name': player_name})
+
+
+@socketio.on('leave_game_room')
+def handle_leave_game_room(data):
+    """Leave a game room"""
+    game_id = data.get('game_id')
+    player_name = data.get('player_name')
+    
+    if game_id:
+        leave_room(game_id)
+        print(f"Player {player_name} left room {game_id}")
+
+
 if __name__ == "__main__":
     import os
 
     debug_mode = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
-    app.run(debug=debug_mode, host="0.0.0.0", port=5000)
+    socketio.run(app, debug=debug_mode, host="0.0.0.0", port=5000)
