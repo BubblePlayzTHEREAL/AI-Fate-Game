@@ -108,17 +108,36 @@ def select_topic(game_id):
     """Select a topic for the round"""
     data = request.json
     topic_index = data.get("topic_index")
+    custom_topic = data.get("custom_topic")
     player_name = data.get("player_name")
 
     game = get_or_create_game(game_id)
 
     if player_name != game["topic_chooser"]:
         return jsonify({"error": "Not your turn to choose"}), 403
+    # If chooser provided a custom topic, use that instead
+    if custom_topic:
+        custom_topic = custom_topic.strip()
+        if not custom_topic:
+            return jsonify({"error": "Custom topic cannot be empty"}), 400
 
-    if topic_index < 0 or topic_index >= len(game["selected_topics"]):
-        return jsonify({"error": "Invalid topic index"}), 400
+        # Optionally add custom topic to selected_topics list for visibility
+        if game.get("selected_topics") is None:
+            game["selected_topics"] = []
+        game["selected_topics"].append(custom_topic)
 
-    game["current_topic"] = game["selected_topics"][topic_index]
+        game["current_topic"] = custom_topic
+    else:
+        # Validate index selection
+        try:
+            topic_index = int(topic_index)
+        except Exception:
+            return jsonify({"error": "Invalid topic index"}), 400
+
+        if topic_index < 0 or topic_index >= len(game["selected_topics"]):
+            return jsonify({"error": "Invalid topic index"}), 400
+
+        game["current_topic"] = game["selected_topics"][topic_index]
     game["phase"] = "planning"
 
     # Reset all players' plans

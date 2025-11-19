@@ -146,6 +146,17 @@ function updateTopicSelectionPhase(state) {
             `;
             topicsList.appendChild(card);
         });
+        // If chooser, allow creating a custom topic
+        if (isChooser) {
+            const customCard = document.createElement('div');
+            customCard.className = 'topic-card custom-topic';
+            customCard.onclick = () => selectCustomTopic();
+            customCard.innerHTML = `
+                <div class="topic-number">Custom</div>
+                <div>Create your own scenario...</div>
+            `;
+            topicsList.appendChild(customCard);
+        }
     }
 }
 
@@ -212,6 +223,29 @@ async function selectTopic(index) {
         }
     } catch (error) {
         console.error('Error selecting topic:', error);
+    }
+}
+
+async function selectCustomTopic() {
+    const custom = prompt('Enter your custom survival scenario:');
+    if (!custom) return;
+
+    try {
+        const response = await fetch(`/api/game/${gameId}/select_topic`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                player_name: playerName,
+                custom_topic: custom
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            alert(error.error || 'Failed to select custom topic');
+        }
+    } catch (error) {
+        console.error('Error selecting custom topic:', error);
     }
 }
 
